@@ -85,6 +85,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   {
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+    caller->mm->symrgtbl[rgid].rg_next = NULL;
  
     *alloc_addr = rgnode.rg_start;
 
@@ -124,24 +125,28 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     return -1;
   }
 
+  caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
+  caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+  caller->mm->symrgtbl[rgid].rg_next = NULL;
+
+  *alloc_addr = old_sbrk;
+
   /* TODO: commit the limit increment */
-  int allocated_end = old_sbrk + size;
 
   /* TODO: commit the allocation address 
   // *alloc_addr = ...
   */
-  struct vm_rg_struct *new_rg = (struct vm_rg_struct *)malloc(sizeof(struct vm_rg_struct));
-  if (new_rg) {
-    new_rg->rg_start = allocated_end;
-    new_rg->rg_end = old_sbrk + inc_sz;
-    enlist_vm_freerg_list(caller->mm, new_rg);
+  if (size < inc_sz) {
+    struct vm_rg_struct *new_rg = (struct vm_rg_struct *)malloc(sizeof(struct vm_rg_struct));
+    if (new_rg) {
+      new_rg->rg_start = old_sbrk + size;
+      new_rg->rg_end = old_sbrk + inc_sz;
+      new_rg->rg_next = NULL;
+      enlist_vm_freerg_list(caller->mm, new_rg);
+    }
   }
 
   cur_vma->sbrk = old_sbrk + inc_sz;
-
-  caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
-  caller->mm->symrgtbl[rgid].rg_end = allocated_end;
-  *alloc_addr = old_sbrk;
 
   pthread_mutex_unlock(&mmvm_lock);
 
