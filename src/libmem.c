@@ -113,17 +113,20 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   /* TODO INCREASE THE LIMIT as inovking systemcall 
    * sys_memap with SYSMEM_INC_OP 
    */
-  struct sc_regs regs;
-  regs.a1 = SYSMEM_INC_OP;
-  regs.a2 = vmaid;
-  regs.a3 = inc_sz;
+  if (size + cur_vma->sbrk > cur_vma->vm_end)
+  {
+    struct sc_regs regs;
+    regs.a1 = SYSMEM_INC_OP;
+    regs.a2 = vmaid;
+    regs.a3 = inc_sz;
 
-  /* SYSCALL 17 sys_memmap */
-  uint32_t sys = syscall(caller, 17, &regs);
-  if (sys != 0) {
-    pthread_mutex_unlock(&mmvm_lock);
-    return -1;
-  }
+    /* SYSCALL 17 sys_memmap */
+    uint32_t sys = syscall(caller, 17, &regs);
+    if (sys != 0) {
+      pthread_mutex_unlock(&mmvm_lock);
+      return -1;
+    }
+  }  
 
   caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
   caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
