@@ -171,17 +171,10 @@ int MEMPHY_dump(struct memphy_struct *mp)
    printf("===== PHYSICAL MEMORY DUMP =====\n");
    
    // Only print bytes that have non-zero values
-   int found_nonzero = 0;
    for (int i = 0; i < mp->maxsz; i++) {
       if (mp->storage[i] != 0) {
-         printf("BYTE %08x: %d\n", i, mp->storage[i]);
-         found_nonzero = 1;
+         printf("BYTE %08X: %d\n", i, mp->storage[i]);
       }
-   }
-   
-   // If no non-zero bytes were found, you might want to indicate that
-   if (!found_nonzero) {
-      printf("No non-zero bytes in memory.\n");
    }
 
    printf("===== PHYSICAL MEMORY END-DUMP =====\n");

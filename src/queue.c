@@ -9,12 +9,11 @@ int empty(struct queue_t * q) {
 
 void enqueue(struct queue_t * q, struct pcb_t * proc) {
         /* TODO: put a new process to queue [q] */
-        if (q != NULL && q->size < MAX_QUEUE_SIZE) {
+        if (q && proc && q->size < MAX_QUEUE_SIZE) {
                 q->proc[q->size] = proc;
-                q->size++;
+                q->size += 1;
         } else {
                 printf("Error: queue_t has already been full\n");
-                exit(1);
         }
 }
 
@@ -23,14 +22,23 @@ struct pcb_t * dequeue(struct queue_t * q) {
          * in the queue [q] and remember to remove it from q
          * */
         if (empty(q)) {
-                printf("There are no process in this queue");
+                // printf("There are no process in this queue");
                 return NULL;
         }
         
         struct pcb_t *front = q->proc[0];
+        int index = 0;
         for (int i = 0; i < q->size - 1; i++) {
+                if (q->proc[i]->prio < front->prio) {
+                        front = q->proc[i];
+                        index = i;
+                }
+        }
+
+        for (int i = index; i < q->size - 1; i++) {
                 q->proc[i] = q->proc[i + 1];
         }
+
         q->size -= 1;
 	return front;
 }

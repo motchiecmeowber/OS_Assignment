@@ -20,11 +20,18 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-// extern pthread_mutex_t queue_lock;
+void extract_proc_name(const char *path, char *proc_name) {
+    const char *last_path = strrchr(path, '/'); // Find last '/' character
+    if (last_path) {
+        strcpy(proc_name, last_path + 1); // Copy substring after last '/'
+    } else {
+        strcpy(proc_name, path); //use full path_name
+    }
+}
 
 int __sys_killall(struct pcb_t *caller, struct sc_regs* regs)
 {
-    char proc_name[100];
+    char proc_name[100];        // Store the target process name
     uint32_t data;
 
     //hardcode for demo only
@@ -40,73 +47,81 @@ int __sys_killall(struct pcb_t *caller, struct sc_regs* regs)
         if(data == -1) proc_name[i]='\0';
         i++;
     }
-    // while(i < 99) {
-    //     if(libread(caller, memrg, i, &data) != 0 || data == (uint32_t)(-1)) {
-    //         break;
-    //     }
-    //     proc_name[i] = (char)data;
-    //     i++;
-    // }
-    // proc_name[i] = '\0';
     printf("The procname retrieved from memregionid %d is \"%s\"\n", memrg, proc_name);
 
-    /* TODO: Traverse proclist to terminate the proc
-     *       stcmp to check the process match proc_name
-     */
-    //caller->running_list
-    //caller->mlq_ready_queue
-    struct queue_t *running_list = caller->running_list;
+//     /* TODO: Traverse proclist to terminate the proc
+//      *       stcmp to check the process match proc_name
+//      */
+//     //caller->running_list
+//     //caller->mlq_ready_queue
+    char proc_temp[100];
+    
+//     /* TODO Maching and terminating 
+//      *       all processes with given
+//      *        name in var proc_name
+//      */
+
+#ifdef MLQ_SCHED
     struct queue_t *ready_queue = caller->mlq_ready_queue;
 
-    if (ready_queue == NULL || running_list == NULL) {
-        printf("Error: mlq_ready_queue or running_list is not initialized.\n");
-        return 1;
+    if (ready_queue){
+        for(int prio = 0; prio < MAX_PRIO; prio++) {
+            int i = 0;
+            for (int j = 0; j < ready_queue[prio].size; j++) {
+                struct pcb_t *proc = ready_queue[prio].proc[j];
+                if (proc) {
+                    extract_proc_name(proc->path, proc_temp);  // Get just the process name
+                    if (strcmp(proc_temp, proc_name) == 0) {
+                        printf("Terminating process %d with name %s from mlq_ready_queue.\n", proc->pid, proc->path);
+#ifdef MM_PAGING
+                        libfree(proc, memrg);  // Use libfree for paging mode
+#else    
+                        // Free process resources
+                        free(proc->code->text);
+                        free(proc->code);
+                        free(proc->page_table);
+                        free(proc->mm);
+                        free(proc);
+#endif
+                    proc = NULL;
+                    } else {
+                        ready_queue[prio].proc[i++] = proc; // Keep non-matching processes
+                    }
+                }
+            }
+            ready_queue[prio].size = i;  // Update size after removal
+        }
     }
-    
-    /* TODO Maching and terminating 
-     *       all processes with given
-     *        name in var proc_name
-     */
-    struct pcb_t* proc;
-    struct queue_t temp_queue = {{0}, 0};
+#endif
 
-    // pthread_mutex_lock(&queue_lock);
+    struct queue_t *running_list = caller->running_list;
 
-    for(int prio = 0; prio < MAX_PRIO; prio++) {
-        while((proc = dequeue(&ready_queue[prio])) != NULL) {
-            if(strcmp(proc->path, proc_name) == 0) {
-                printf("Terminating process %d with name %s from mlq_ready_queue.\n", proc->pid, proc->path);
-                free(proc->code->text);
-                free(proc->code);
-                free(proc->page_table);
-                free(proc->mm);
-                free(proc);
-            } else {
-                enqueue(&temp_queue, proc);
+    if (running_list) {
+        int i = 0;
+        for(int j = 0; j < running_list->size; j++) {
+            struct pcb_t *proc = running_list->proc[j];
+            if (proc) {
+                extract_proc_name(proc->path, proc_temp);
+                if (strcmp(proc_temp, proc_name) == 0) {
+                    printf("Terminating process %d with name %s from running list.\n", proc->pid, proc->path);
+#ifdef MM_PAGING
+                    libfree(proc, memrg);
+#else
+                    // Free process resources
+                    free(proc->code->text);
+                    free(proc->code);
+                    free(proc->page_table);
+                    free(proc->mm);
+                    free(proc);
+#endif
+                proc = NULL;
+                } else {
+                    running_list->proc[i++] = proc;
+                }
             }
         }
-
-        while((proc = dequeue(&temp_queue)) != NULL) {
-            enqueue(&ready_queue[prio], proc);
-        }
+        running_list->size = i;
     }
 
-    while((proc = dequeue(running_list)) != NULL) {
-        if(strcmp(proc->path, proc_name) == 0) {
-            printf("Terminating process %d with name %s from running list.\n", proc->pid, proc->path);
-            free(proc->code->text);
-            free(proc->code);
-            free(proc->page_table);
-            free(proc->mm);
-            free(proc);
-        } else {
-            enqueue(&temp_queue, proc);
-        }
-    }
-    while((proc = dequeue(&temp_queue)) != NULL) {
-        enqueue(running_list, proc);
-    }
-
-    // pthread_mutex_unlock(&queue_lock);
     return 0; 
 }

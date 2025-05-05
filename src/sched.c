@@ -58,13 +58,11 @@ struct pcb_t * get_mlq_proc(void) {
         if (!empty(&mlq_ready_queue[prio]) && slot[prio] > 0) {
             proc = dequeue(&mlq_ready_queue[prio]);
             slot[prio] -= 1;
-            pthread_mutex_unlock(&queue_lock);
-            return proc;
+            break;
         }
     }
 
-    // If no process is found but queues aren't empty, reset the slots and try again
-    if (queue_empty() == -1 && proc == NULL) {
+    if (!proc) {
         // Reset slots for each priority level
         for (unsigned int prio = 0; prio < MAX_PRIO; prio++) {
             slot[prio] = MAX_PRIO - prio;
@@ -74,9 +72,8 @@ struct pcb_t * get_mlq_proc(void) {
         for (unsigned int prio = 0; prio < MAX_PRIO; prio++) {
             if (!empty(&mlq_ready_queue[prio]) && slot[prio] > 0) {
                 proc = dequeue(&mlq_ready_queue[prio]);
-                slot[prio]--;
-                pthread_mutex_unlock(&queue_lock);
-                return proc;
+                slot[prio] -= 1;
+				break;
             }
         }
     }

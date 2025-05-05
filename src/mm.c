@@ -86,7 +86,7 @@ int vmap_page_range(struct pcb_t *caller,           // process call
                     struct framephy_struct *frames, // list of the mapped frames
                     struct vm_rg_struct *ret_rg)    // return mapped region, the real mapped fp
 {                                                   // no guarantee all given pages are mapped
-  //struct framephy_struct *fpit;
+  struct framephy_struct *fpit = frames;
   int pgit = 0;
   int pgn = PAGING_PGN(addr);
 
@@ -96,21 +96,20 @@ int vmap_page_range(struct pcb_t *caller,           // process call
   //ret_rg->vmaid = ...
   */
   ret_rg->rg_start = addr;
-  ret_rg->rg_end = addr + pgnum * PAGING_PAGESZ;
-  ret_rg->rg_next = NULL;
+  ret_rg->rg_end = addr + (pgnum - 1) * PAGING_PAGESZ;
+  // ret_rg->rg_next = NULL;
 
   /* TODO map range of frame to address space
    *      [addr to addr + pgnum*PAGING_PAGESZ
    *      in page table caller->mm->pgd[]
    */
-  for (pgit = 0; pgit < pgnum; pgit++) {
-    struct framephy_struct *frame = frames + pgit;
-    pte_set_fpn(&caller->mm->pgd[pgit + pgn], frame->fpn);
-    caller->mm->pgd[pgit + pgn] |= PAGING_PTE_PRESENT_MASK;
+  for (pgit = 0; pgit < pgnum && fpit; pgit++, fpit = fpit->fp_next) {
+    pgn = PAGING_PGN((addr + pgit * PAGING_PAGESZ));
+    pte_set_fpn(&caller->mm->pgd[pgn], fpit->fpn);
 
   /* Tracking for later page replacement activities (if needed)
    * Enqueue new usage page */
-    enlist_pgn_node(&caller->mm->fifo_pgn, pgn + pgit);
+    enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
   }
 
   return 0;
@@ -132,62 +131,56 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   //caller-> ...
   //frm_lst-> ...
   */
-  struct framephy_struct *head = NULL;
-  struct framephy_struct *tail = NULL;
 
+  *frm_lst = NULL;
+  
   for (pgit = 0; pgit < req_pgnum; pgit++)
   {
   /* TODO: allocate the page
    */
     newfp_str = (struct framephy_struct *)malloc(sizeof(struct framephy_struct));
     if (!newfp_str) {
-      struct framephy_struct *current = head;
-      struct framephy_struct *next;
-
-      while (current) {
-        next = current->fp_next;
-        MEMPHY_put_freefp(caller->mram, current->fpn);
-        free(current);
-        current = next;
-      }
-
-      return -1;
+      fprintf(stderr, "Error: Failed to allocate memory for framephy_struct.\n");
+      goto cleanup; // Cleanup and exit on failure
     }
 
-    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0)
-    {
+    // Get a free frame from physical memory
+    if (MEMPHY_get_freefp(caller->mram, &fpn) == 0) {
+      // Assign frame information
       newfp_str->fpn = fpn;
+      newfp_str->owner = caller->mm;
       newfp_str->fp_next = NULL;
 
-      if (!head) {
-        head = newfp_str;
-        tail = newfp_str;
+      // Add the frame to the list
+      if (!*frm_lst) {
+        *frm_lst = newfp_str;
       } else {
-        tail->fp_next = newfp_str;
-        tail = newfp_str;
+        struct framephy_struct *cur = *frm_lst;
+        while (cur->fp_next) {
+          cur = cur->fp_next;
+        }
+        cur->fp_next = newfp_str;
       }
-    }
-    else
-    { // TODO: ERROR CODE of obtaining somes but not enough frames
-      free(newfp_str);
-
-      struct framephy_struct *current = head;
-      struct framephy_struct *next;
-
-      while (current) {
-        next = current->fp_next;
-        MEMPHY_put_freefp(caller->mram, current->fpn);
-        free(current);
-        current = next;
-      }
-
-      return -1;
+    } else {
+      fprintf(stderr, "Error: Not enough free frames available.\n");
+      free(newfp_str); // Free the current frame structure
+      goto cleanup;    // Cleanup and exit on failure
     }
   }
 
-  *frm_lst = head;
-
   return 0;
+
+cleanup:
+  // Free all previously allocated frames
+  struct framephy_struct *cur = *frm_lst;
+  while (cur) {
+    struct framephy_struct *tmp = cur;
+    cur = cur->fp_next;
+    MEMPHY_put_freefp(caller->mram, tmp->fpn);
+    free(tmp);
+  }
+  *frm_lst = NULL; // Reset the frame list to NULL
+  return -3000;
 }
 
 /*
