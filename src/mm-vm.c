@@ -184,13 +184,7 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
   // cur_vma->vm_end ...
   // inc_limit_ret...
 
-  int old_sbrk = cur_vma->sbrk;
-
-  if (vmaid == 0) {
-    cur_vma->vm_end = PAGING_PAGE_ALIGNSZ(old_sbrk + inc_sz) - 1;
-  } else {
-    cur_vma->vm_end = ((old_sbrk - inc_sz) / PAGING_PAGESZ) * PAGING_PAGESZ;
-  }
+  cur_vma->vm_end = area->rg_end + 1;
   newrg->rg_start = area->rg_start;
   newrg->rg_end = area->rg_end;
   newrg->rg_next = NULL;

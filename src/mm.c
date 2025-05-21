@@ -103,7 +103,7 @@ int vmap_page_range(struct pcb_t *caller,           // process call
    *      [addr to addr + pgnum*PAGING_PAGESZ
    *      in page table caller->mm->pgd[]
    */
-  for (pgit = 0; pgit < pgnum && fpit; pgit++, fpit = fpit->fp_next) {
+  for (pgit = pgnum - 1; pgit >= 0 && fpit; pgit--, fpit = fpit->fp_next) {
     pgn = PAGING_PGN((addr + pgit * PAGING_PAGESZ));
     pte_set_fpn(&caller->mm->pgd[pgn], fpit->fpn);
 
@@ -260,7 +260,6 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
   if (!vma0) {
     return -1;
   }
-
   // mm->pgd = malloc(PAGING_MAX_PGN * sizeof(uint32_t));
 
   // Initialized pte to 0
